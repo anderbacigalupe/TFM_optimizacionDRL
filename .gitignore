@@ -1,0 +1,19 @@
+# Ignorar entorno virtual
+venv/
+.env/
+
+# Archivos y carpetas de Python
+__pycache__/
+*.pyc
+
+# Checkpoints de Jupyter
+*.ipynb_checkpoints/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Carpetas de salida o resultados (ajusta según las que uses)
+figures/
+results/
+models/
