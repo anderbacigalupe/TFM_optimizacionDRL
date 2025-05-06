@@ -108,14 +108,14 @@ pip install -r requirements.txt
 python -m utils.procesar_datos
 python -m utils.calculate_log_returns
 
-4. Entrenar modelos:
+**4. Entrenar modelos:**
 # Entrenar DQN
 python -m entrenamiento.entrenar_dqn
 
 # Entrenar DDPG
 python -m entrenamiento.entrenar_ddpg
 
-5. Evaluar modelos:
+**5. Evaluar modelos:**
 # Evaluar DQN
 python -m evaluacion.evaluar_dqn
 
