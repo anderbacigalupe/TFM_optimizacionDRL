@@ -8,17 +8,18 @@ Este proyecto forma parte del Trabajo de Fin de Máster en Ciencia de Datos. El 
 
 TFM_optimizacionDRL/
 │
-├── agents/                 # Implementaciones de agentes DRL y scripts de entrenamiento
+├── agentes/                # Implementaciones de agentes DRL
 ├── data/                   # Datos históricos de precios y variables económicas (CSV)
 ├── entorno/                # Implementación del entorno de inversión personalizado
-├── figures/                # Gráficas y visualizaciones generadas
+├── entrenamiento/          # Entrenamiento de los modelos DQN y DDPG
+├── evaluacion/             # Scripts para calcular metricas de los modelos de DRL
 ├── markowitz/              # Implementación del modelo Media-Varianza con walk-forward
-├── models/                 # Pesos y resultados de los modelos DQN y DDPG
-├── notebooks/              # Cuadernos exploratorios y análisis iniciales (.ipynb)
 ├── results/                # Resultados finales de pruebas y comparaciones
+├── utils/                  # 
 ├── .gitignore              # Archivos y carpetas ignoradas por Git
 ├── environment.yml         # Archivo para reproducir el entorno con conda
-└── README.md               # Este archivo
+├── README.md               # Este archivo
+└── requirements.txt        
 
 
 ---
