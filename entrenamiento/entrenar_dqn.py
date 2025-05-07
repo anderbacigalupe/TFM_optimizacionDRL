@@ -5,13 +5,86 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import torch
 import gymnasium as gym
-from tqdm import tqdm
+import inspect
 import time
 import json
+
+# Intentamos importar tqdm, pero si no está disponible, creamos una clase sustituta
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+    print("Nota: La biblioteca 'tqdm' no está instalada. No se mostrarán barras de progreso.")
+    
+    # Clase sustituta simple para tqdm
+    class FakeTqdm:
+        def __init__(self, total, desc="", leave=True):
+            self.total = total
+            self.desc = desc
+            self.n = 0
+            self.leave = leave
+        
+        def update(self, n=1):
+            self.n += n
+            if self.n % 25 == 0 or self.n >= self.total:  # Mostrar progreso cada 25 pasos
+                print(f"\r{self.desc}: {self.n}/{self.total} ({self.n*100/self.total:.1f}%)", end="")
+        
+        def close(self):
+            if self.leave:
+                print()  # Nueva línea al cerrar
+    
+    tqdm = FakeTqdm
 
 # Importamos nuestro entorno y agente
 from entorno.entorno_cartera import PortfolioEnv
 from agentes.agente_dqn import DQNAgent
+
+# Aplicamos monkey patch para asegurar que el agente acepta min_weight y tau
+# Guardamos el inicializador original
+original_init = DQNAgent.__init__
+
+# Verificamos si ya tiene los parámetros que necesitamos
+sig = inspect.signature(original_init)
+if 'min_weight' not in sig.parameters or 'tau' not in sig.parameters:
+    # Definimos un nuevo inicializador que incluye los parámetros faltantes
+    def new_init(self, state_dim, action_dim, n_discrete_bins=10, learning_rate=1e-3, 
+                gamma=0.99, epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.995,
+                buffer_capacity=10000, batch_size=64, min_weight=0.05, tau=0.005):
+        
+        # Guarda los nuevos parámetros
+        original_init(self, state_dim, action_dim, n_discrete_bins, learning_rate,
+                    gamma, epsilon_start, epsilon_end, epsilon_decay,
+                    buffer_capacity, batch_size)
+        
+        # Añade los atributos necesarios para tu implementación actualizada
+        self.min_weight = min_weight
+        self.tau = tau
+        
+        # Configura el dispositivo si no está ya configurado
+        if not hasattr(self, 'device'):
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            print(f"Añadido soporte para GPU. Usando dispositivo: {self.device}")
+            
+        # Añadir actualizaciones adicionales si el agente no tiene otras funciones
+        if not hasattr(self, 'update_target_network') or 'use_soft_update' not in inspect.signature(self.update_target_network).parameters:
+            def update_target_network(slf, use_soft_update=True):
+                if use_soft_update and hasattr(slf, 'tau'):
+                    # Soft update: τ*θ_policy + (1-τ)*θ_target
+                    for target_param, policy_param in zip(slf.target_net.parameters(), slf.policy_net.parameters()):
+                        target_param.data.copy_(
+                            slf.tau * policy_param.data + (1.0 - slf.tau) * target_param.data
+                        )
+                else:
+                    # Hard update: θ_target = θ_policy
+                    slf.target_net.load_state_dict(slf.policy_net.state_dict())
+            
+            # Reemplazar o añadir el método
+            DQNAgent.update_target_network = update_target_network
+        
+    # Reemplaza el inicializador
+    DQNAgent.__init__ = new_init
+    print("DQNAgent actualizado para soportar peso mínimo y tau")
 
 # Configuración del entrenamiento
 SEED = 42
@@ -224,10 +297,11 @@ def main():
         epsilon_end=EPSILON_END,
         epsilon_decay=EPSILON_DECAY,
         buffer_capacity=BUFFER_CAPACITY,
-        batch_size=BATCH_SIZE,
-        min_weight=MIN_WEIGHT,
-        tau=TAU
+        batch_size=BATCH_SIZE
     )
+    
+    agent.min_weight = MIN_WEIGHT
+    agent.tau = TAU
     
     # Creamos un directorio para guardar los modelos
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -329,7 +403,11 @@ def main():
             step += 1
             
             # Actualizamos la red objetivo con soft update en cada paso
-            agent.update_target_network(use_soft_update=True)
+            try:
+                agent.update_target_network(use_soft_update=True)
+            except TypeError:
+                # Si el método no acepta el parámetro, usamos la versión sin parámetros
+                agent.update_target_network()
             
             progress_bar.update(1)
         
@@ -340,7 +418,11 @@ def main():
         
         # Actualizamos la red objetivo con hard update periódicamente
         if episode % UPDATE_TARGET_EVERY == 0:
-            agent.update_target_network(use_soft_update=False)
+            try:
+                agent.update_target_network(use_soft_update=False)
+            except TypeError:
+                # Si el método no acepta el parámetro, usamos la versión sin parámetros
+                agent.update_target_network()
             print("Red objetivo actualizada (hard update)")
         
         # Guardamos métricas del episodio
