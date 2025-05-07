@@ -36,7 +36,8 @@ TFM_optimizacionDRL/
 │
 ├── results/             # Resultados y visualizaciones
 │
-├── utils/                  # Utilidades para procesamiento de datos
+├── utils/                  # Scripts con utilidades varias para el proyecto
+│   ├── check_cuda.py               # Verificar CUDA y cuDNN y comprobar GPU instalada
 │   ├── procesar_datos.py           # Preprocesamiento de datos
 │   └── calculate_log_returns.py    # Cálculo de retornos logarítmicos
 │
