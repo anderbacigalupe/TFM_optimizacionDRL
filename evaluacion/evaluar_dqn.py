@@ -4,6 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import torch
 from datetime import datetime
+import sys
+
+# Añadir el directorio raíz del proyecto al path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Importamos nuestro entorno y agente
 from entorno.entorno_cartera import PortfolioEnv

@@ -1,0 +1,24 @@
+{
+    "data_path": "data/processed/processed_prices.csv",
+    "num_episodes": 200,
+    "max_steps": 252,
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "epsilon_start": 1.0,
+    "epsilon_end": 0.01,
+    "epsilon_decay": 0.99,
+    "buffer_capacity": 20000,
+    "batch_size": 128,
+    "n_discrete_bins": 5,
+    "min_weight": 0.05,
+    "tau": 0.005,
+    "assets": [
+        "GLD",
+        "HYG",
+        "SPY",
+        "TLT",
+        "VB",
+        "VNQ"
+    ],
+    "timestamp": "20250508_101348"
+}

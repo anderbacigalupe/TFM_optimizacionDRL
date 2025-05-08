@@ -1,0 +1,9 @@
+Métricas de rendimiento del modelo DQN
+======================================
+
+Rendimiento anualizado: nan%
+Volatilidad anualizada: nan%
+Ratio de Sharpe: 0.0000
+Ratio de Sortino: 0.0000
+VaR95 diario: nan%
+Máximo Drawdown: nan%
