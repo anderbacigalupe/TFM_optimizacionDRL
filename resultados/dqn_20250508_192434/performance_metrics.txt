@@ -1,0 +1,9 @@
+Métricas de rendimiento del modelo DQN
+======================================
+
+Rendimiento anualizado: 6.1693%
+Volatilidad anualizada: 11.6153%
+Ratio de Sharpe: 0.4450
+Ratio de Sortino: 0.5788
+VaR95 diario: -1.1104%
+Máximo Drawdown: 29.0389%

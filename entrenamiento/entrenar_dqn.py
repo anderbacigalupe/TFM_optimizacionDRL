@@ -97,24 +97,24 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # Parámetros de entrenamiento
-NUM_EPISODES = 500           # Aumentado de 200 a 500
-MAX_STEPS = 252              # Mantener igual (aprox. un año de trading)
-UPDATE_TARGET_EVERY = 10     # Aumentado de 5 a 10 para mayor estabilidad
-SAVE_MODEL_EVERY = 50        # Aumentado de 20 a 50
-EVAL_EPISODES = 5            # Mantener igual
-WARMUP_EPISODES = 10         # Aumentado de 5 a 10
+NUM_EPISODES = 500           
+MAX_STEPS = 252              
+UPDATE_TARGET_EVERY = 10     
+SAVE_MODEL_EVERY = 50        
+EVAL_EPISODES = 5            
+WARMUP_EPISODES = 10         
 
 # Parámetros del agente
-LEARNING_RATE = 0.0001       # Reducido de 0.0003 a 0.0001
-GAMMA = 0.99                 # Mantener igual
-EPSILON_START = 1.0          # Mantener igual
-EPSILON_END = 0.01           # Mantener igual
-EPSILON_DECAY = 0.995        # Ajustado para decaer más lentamente (era 0.99)
-BUFFER_CAPACITY = 50000      # Aumentado de 20000 a 50000
-BATCH_SIZE = 128             # Mantener igual
-N_DISCRETE_BINS = 5          # Mantener igual
-MIN_WEIGHT = 0.05            # Mantener igual (5%)
-TAU = 0.001                  # Reducido de 0.005 a 0.001 para updates más graduales
+LEARNING_RATE = 0.0001       
+GAMMA = 0.99                 
+EPSILON_START = 1.0          
+EPSILON_END = 0.01           
+EPSILON_DECAY = 0.995        
+BUFFER_CAPACITY = 50000      
+BATCH_SIZE = 128             
+N_DISCRETE_BINS = 5          
+MIN_WEIGHT = 0.05            
+TAU = 0.001                  
 
 def create_portfolio_env(data_path):
     """
