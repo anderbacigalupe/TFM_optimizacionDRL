@@ -34,6 +34,8 @@ class ReplayBuffer:
     
     def __len__(self):
         return len(self.buffer)
+    
+print("DEBUG: Loading AGENTE_DQN.PY - Version with min_weight and tau --")
 
 class DQNAgent:
     def __init__(self, state_dim, action_dim, n_discrete_bins=10, learning_rate=1e-3, 
