@@ -97,24 +97,24 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # Parámetros de entrenamiento
-NUM_EPISODES = 200  # Aumentado para mejor convergencia
-MAX_STEPS = 252  # Aproximadamente un año de trading (252 días)
-UPDATE_TARGET_EVERY = 5  # Actualizar la red objetivo más frecuentemente
-SAVE_MODEL_EVERY = 20  # Guardar el modelo cada 20 episodios
-EVAL_EPISODES = 5  # Número de episodios para evaluar
-WARMUP_EPISODES = 5  # Episodios de calentamiento sin actualizar política
+NUM_EPISODES = 500           # Aumentado de 200 a 500
+MAX_STEPS = 252              # Mantener igual (aprox. un año de trading)
+UPDATE_TARGET_EVERY = 10     # Aumentado de 5 a 10 para mayor estabilidad
+SAVE_MODEL_EVERY = 50        # Aumentado de 20 a 50
+EVAL_EPISODES = 5            # Mantener igual
+WARMUP_EPISODES = 10         # Aumentado de 5 a 10
 
 # Parámetros del agente
-LEARNING_RATE = 0.0003  # Reducido para mayor estabilidad
-GAMMA = 0.99
-EPSILON_START = 1.0
-EPSILON_END = 0.01
-EPSILON_DECAY = 0.99  # Más lento para mejor exploración
-BUFFER_CAPACITY = 20000  # Aumentado para más experiencia
-BATCH_SIZE = 128  # Aumentado para mejor estadística
-N_DISCRETE_BINS = 5  # Número de valores discretos por activo
-MIN_WEIGHT = 0.05  # Peso mínimo por activo (5%)
-TAU = 0.005  # Factor para soft update
+LEARNING_RATE = 0.0001       # Reducido de 0.0003 a 0.0001
+GAMMA = 0.99                 # Mantener igual
+EPSILON_START = 1.0          # Mantener igual
+EPSILON_END = 0.01           # Mantener igual
+EPSILON_DECAY = 0.995        # Ajustado para decaer más lentamente (era 0.99)
+BUFFER_CAPACITY = 50000      # Aumentado de 20000 a 50000
+BATCH_SIZE = 128             # Mantener igual
+N_DISCRETE_BINS = 5          # Mantener igual
+MIN_WEIGHT = 0.05            # Mantener igual (5%)
+TAU = 0.001                  # Reducido de 0.005 a 0.001 para updates más graduales
 
 def create_portfolio_env(data_path):
     """
