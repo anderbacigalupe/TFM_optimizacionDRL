@@ -58,9 +58,12 @@ class PortfolioEnv(gym.Env):
 
         prev_prices = self.data[self.current_step]
 
-        if self.current_step >= len(self.data):
+        # Verifica si el siguiente paso excedería el límite de datos
+        if self.current_step >= len(self.data) - 1:
             self.done = True
-            return self._get_observation(), 0, self.done, False, {}
+            # Usa los precios actuales para la observación final
+            obs = self._get_observation()
+            return obs, 0, self.done, False, {}
         
         self.current_step += 1
         new_prices = self.data[self.current_step]

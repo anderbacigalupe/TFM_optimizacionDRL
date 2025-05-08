@@ -8,6 +8,11 @@ import gymnasium as gym
 import inspect
 import time
 import json
+import sys
+
+# Add the project root to Python's path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 # Intentamos importar tqdm, pero si no está disponible, creamos una clase sustituta
 try:
