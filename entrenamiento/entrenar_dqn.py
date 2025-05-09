@@ -97,24 +97,24 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # Parámetros de entrenamiento
-NUM_EPISODES = 500           
-MAX_STEPS = 252              
-UPDATE_TARGET_EVERY = 10     
-SAVE_MODEL_EVERY = 50        
-EVAL_EPISODES = 5            
-WARMUP_EPISODES = 10         
+NUM_EPISODES = 1500          # ↑ Aumentado significativamente (de 500 a 1500)
+MAX_STEPS = 252              # ✓ Mantener igual
+UPDATE_TARGET_EVERY = 5      # ↓ Disminuido para actualizaciones más frecuentes (de 10 a 5)
+SAVE_MODEL_EVERY = 100       # ↑ Aumentado para reducir I/O (de 50 a 100)
+EVAL_EPISODES = 10           # ↑ Aumentado para evaluaciones más robustas (de 5 a 10)
+WARMUP_EPISODES = 20         # ↑ Aumentado para mejor inicialización (de 10 a 20)
 
 # Parámetros del agente
-LEARNING_RATE = 0.0001       
-GAMMA = 0.99                 
-EPSILON_START = 1.0          
-EPSILON_END = 0.01           
-EPSILON_DECAY = 0.995        
-BUFFER_CAPACITY = 50000      
-BATCH_SIZE = 128             
-N_DISCRETE_BINS = 5          
-MIN_WEIGHT = 0.05            
-TAU = 0.001                  
+LEARNING_RATE = 0.00005      # ↓ Reducido para aprendizaje más estable (de 0.0001 a 0.00005)
+GAMMA = 0.995                # ↑ Aumentado para valorar más el futuro (de 0.99 a 0.995)
+EPSILON_START = 1.0          # ✓ Mantener igual
+EPSILON_END = 0.05           # ↑ Aumentado para mayor exploración residual (de 0.01 a 0.05)
+EPSILON_DECAY = 0.998        # ↑ Más lento para exploración más prolongada (de 0.995 a 0.998)
+BUFFER_CAPACITY = 100000     # ↑ Aumentado para mayor memoria (de 50000 a 100000)
+BATCH_SIZE = 256             # ↑ Aumentado para mejor estimación de gradientes (de 128 a 256)
+N_DISCRETE_BINS = 5          # ✓ Mantener igual
+MIN_WEIGHT = 0.05            # ✓ Mantener igual
+TAU = 0.0005                 # ↓ Reducido para actualizaciones más suaves (de 0.001 a 0.0005)                
 
 def create_portfolio_env(data_path):
     """
@@ -139,49 +139,46 @@ def create_portfolio_env(data_path):
     return env, asset_names
 
 def evaluate_agent(agent, env, num_episodes=5, render=False):
-    """
-    Evalúa el rendimiento del agente en el entorno.
-    """
     total_rewards = []
     final_balances = []
-    portfolio_values = []
-    weights_history = []
+    all_daily_returns = []  # Para calcular Sharpe
     
     for ep in range(num_episodes):
         state, _ = env.reset()
         done = False
         episode_reward = 0
-        ep_portfolio_values = [env.balance]
-        ep_weights_history = []
+        daily_returns = []
         
-        step = 0
         while not done:
-            action = agent.select_action(state, training=False)  # No exploración
+            action = agent.select_action(state, training=False)
             next_state, reward, done, _, info = env.step(action)
             
-            if render and ep == 0:  # Solo renderizamos el primer episodio
-                env.render()
+            # Capturar retorno diario (si está disponible en info)
+            if 'daily_return' in info:
+                daily_returns.append(info['daily_return'])
+            # Alternativamente, podemos calcularlo nosotros:
+            elif 'portfolio_value' in info and len(daily_returns) > 0:
+                daily_return = info['portfolio_value'] / previous_value - 1
+                daily_returns.append(daily_return)
             
+            previous_value = info.get('portfolio_value', env.balance)
             episode_reward += reward
             state = next_state
-            step += 1
-            
-            ep_portfolio_values.append(env.balance)
-            ep_weights_history.append(env.portfolio_weights.copy())
         
         total_rewards.append(episode_reward)
         final_balances.append(env.balance)
-        
-        if len(portfolio_values) == 0 or ep == 0:
-            portfolio_values = ep_portfolio_values
-            weights_history = ep_weights_history
+        all_daily_returns.extend(daily_returns)
+    
+    # Calcular Sharpe ratio
+    avg_return = np.mean(all_daily_returns) * 252  # Anualizado
+    std_return = np.std(all_daily_returns) * np.sqrt(252)  # Anualizado
+    sharpe_ratio = avg_return / std_return if std_return > 0 else 0
     
     return {
         'avg_reward': np.mean(total_rewards),
         'avg_balance': np.mean(final_balances),
         'final_balances': final_balances,
-        'portfolio_values': portfolio_values,
-        'weights_history': weights_history
+        'avg_sharpe': sharpe_ratio
     }
 
 def plot_training_results(rewards, balances, losses, epsilons, model_dir):
@@ -443,34 +440,39 @@ def main():
         minutes, seconds = divmod(remainder, 60)
         
         # Evaluamos el agente cada 10 episodios o en el último
-        if episode % 10 == 0 or episode == NUM_EPISODES - 1:
-            print(f"\nEvaluando agente en episodio {episode+1}...")
-            eval_results = evaluate_agent(agent, env, EVAL_EPISODES)
-            
-            print(f"Episodio {episode+1}/{NUM_EPISODES} | "
-                  f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
-                  f"Recompensa: {episode_reward:.4f} | "
-                  f"Balance: ${env.balance:.2f} | "
-                  f"Epsilon: {agent.epsilon:.4f} | "
-                  f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f} | "
-                  f"Eval Balance: ${eval_results['avg_balance']:.2f}")
-            
-            # Guardamos el mejor modelo según la evaluación
-            if eval_results['avg_balance'] > best_eval_balance:
-                best_eval_balance = eval_results['avg_balance']
-                agent.save(os.path.join(model_dir, 'best_model.pth'))
-                print(f"Nuevo mejor modelo guardado con balance: ${best_eval_balance:.2f}")
-        else:
-            print(f"Episodio {episode+1}/{NUM_EPISODES} | "
-                  f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
-                  f"Recompensa: {episode_reward:.4f} | "
-                  f"Balance: ${env.balance:.2f} | "
-                  f"Epsilon: {agent.epsilon:.4f} | "
-                  f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f}")
+    if episode % 10 == 0 or episode == NUM_EPISODES - 1:
+        print(f"\nEvaluando agente en episodio {episode+1}...")
+        eval_results = evaluate_agent(agent, env, EVAL_EPISODES)
         
-        # Guardamos el modelo periódicamente
-        if (episode + 1) % SAVE_MODEL_EVERY == 0:
-            agent.save(os.path.join(model_dir, f'model_ep{episode+1}.pth'))
+        # Inicializar best_eval_sharpe si no existe
+        if not hasattr(locals(), 'best_eval_sharpe') or 'best_eval_sharpe' not in locals():
+            best_eval_sharpe = 0.0
+        
+        print(f"Episodio {episode+1}/{NUM_EPISODES} | "
+            f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
+            f"Recompensa: {episode_reward:.4f} | "
+            f"Balance: ${env.balance:.2f} | "
+            f"Epsilon: {agent.epsilon:.4f} | "
+            f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f} | "
+            f"Eval Balance: ${eval_results['avg_balance']:.2f} | "
+            f"Eval Sharpe: {eval_results['avg_sharpe']:.4f}")  # Añadir Sharpe al log
+        
+        # Guardamos el mejor modelo según el ratio Sharpe en lugar del balance
+        if eval_results['avg_sharpe'] > best_eval_sharpe:
+            best_eval_sharpe = eval_results['avg_sharpe']
+            agent.save(os.path.join(model_dir, 'best_model.pth'))
+            print(f"Nuevo mejor modelo guardado con Sharpe: {best_eval_sharpe:.4f} (Balance: ${eval_results['avg_balance']:.2f})")
+    else:
+        print(f"Episodio {episode+1}/{NUM_EPISODES} | "
+            f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
+            f"Recompensa: {episode_reward:.4f} | "
+            f"Balance: ${env.balance:.2f} | "
+            f"Epsilon: {agent.epsilon:.4f} | "
+            f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f}")
+        
+    # Guardamos el modelo periódicamente
+    if (episode + 1) % SAVE_MODEL_EVERY == 0:
+        agent.save(os.path.join(model_dir, f'model_ep{episode+1}.pth'))
     
     # Guardamos el modelo final
     agent.save(os.path.join(model_dir, 'final_model.pth'))
@@ -482,8 +484,9 @@ def main():
         'losses': episode_losses,
         'epsilons': episode_epsilons,
         'best_balance': best_eval_balance,
+        'best_sharpe': best_eval_sharpe,  # Añadir mejor Sharpe
         'training_duration': time.time() - start_time
-    }
+}
     
     save_training_metrics(training_metrics, model_dir)
     
@@ -496,17 +499,19 @@ def main():
     print("="*50 + "\n")
     
     final_eval = evaluate_agent(agent, env, EVAL_EPISODES * 2, render=True)
-    
+
     print("\nResultados de la evaluación final:")
     print(f"Recompensa promedio: {final_eval['avg_reward']:.4f}")
     print(f"Balance promedio: ${final_eval['avg_balance']:.2f}")
+    print(f"Ratio Sharpe: {final_eval['avg_sharpe']:.4f}")  # Añadir Sharpe
     print(f"Mejor balance: ${max(final_eval['final_balances']):.2f}")
     print(f"Peor balance: ${min(final_eval['final_balances']):.2f}")
-    
+
     # Guardamos las métricas de evaluación
     evaluation_metrics = {
         'avg_reward': final_eval['avg_reward'],
         'avg_balance': final_eval['avg_balance'],
+        'avg_sharpe': final_eval['avg_sharpe'],  # Añadir Sharpe
         'final_balances': final_eval['final_balances'],
         'best_balance': max(final_eval['final_balances']),
         'worst_balance': min(final_eval['final_balances'])
