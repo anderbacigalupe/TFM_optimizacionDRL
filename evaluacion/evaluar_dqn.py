@@ -205,8 +205,8 @@ def main():
     if not data_path:
         data_path = input("Introduce la ruta al archivo CSV con los datos de precios: ")
     
-    # Creamos directorio para resultados
-    results_dir = f"resultados/dqn_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # Creamos directorio para resultados si no existe
+    results_dir = f"results/dqn_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     os.makedirs(results_dir, exist_ok=True)
     
     # Cargamos datos

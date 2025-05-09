@@ -203,7 +203,7 @@ def main():
         data_path = input("Introduce la ruta al archivo CSV con los datos de precios: ")
     
     # Creamos directorio para resultados
-    results_dir = f"resultados/ddpg_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    results_dir = f"results/ddpg_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     os.makedirs(results_dir, exist_ok=True)
     
     # Cargamos datos

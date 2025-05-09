@@ -169,6 +169,9 @@ class PortfolioEnv(gym.Env):
         if portfolio_growth <= 0:
             portfolio_growth = 1e-8  # Valor pequeño positivo
         
+        # Calculamos el retorno diario actual
+        daily_return = portfolio_growth - 1.0  # Retorno simple diario
+        
         # Actualizamos el balance total
         self.balance = new_portfolio_value
         
@@ -187,15 +190,54 @@ class PortfolioEnv(gym.Env):
         if sum_weights > 0:
             self.portfolio_weights = self.portfolio_weights / sum_weights
         
-        # Recompensa basada en el log del crecimiento con protección contra NaN
-        try:
-            reward = np.log(portfolio_growth)
-        except (ValueError, RuntimeWarning):
-            # Si hay un problema con el logaritmo, usar un valor alternativo
-            if portfolio_growth > 1:
-                reward = 0.01  # Pequeña recompensa positiva
+        # ----- INICIO DE LA NUEVA FUNCIÓN DE RECOMPENSA BASADA EN SHARPE -----
+        
+        # Inicializa el historial de retornos si no existe
+        if not hasattr(self, 'returns_history'):
+            self.returns_history = []
+            self.reward_scaling_factor = 1.0  # Factor para escalar la recompensa
+        
+        # Añade el retorno actual al historial
+        self.returns_history.append(daily_return)
+        
+        # Establece el tamaño de la ventana móvil para el cálculo del Sharpe
+        WINDOW_SIZE = 60  # Aproximadamente 3 meses de trading
+        
+        # Limita el tamaño del historial
+        if len(self.returns_history) > WINDOW_SIZE:
+            self.returns_history.pop(0)
+        
+        # Calcula la recompensa según la cantidad de datos disponibles
+        if len(self.returns_history) >= 20:  # Mínimo razonable para estadísticas
+            # Tasa libre de riesgo diaria 
+            risk_free_rate_daily = 0.00
+            
+            # Calcula media y desviación estándar de los retornos recientes
+            mean_return = np.mean(self.returns_history)
+            std_return = np.std(self.returns_history)
+            
+            # Evita división por cero
+            if std_return > 0:
+                # Sharpe ratio "instantáneo" basado en la ventana móvil
+                # Multiplicamos por sqrt(252) para anualizar
+                sharpe_ratio = (mean_return - risk_free_rate_daily) / std_return * np.sqrt(252)
+                
+                # Normaliza el Sharpe para que sea una recompensa adecuada
+                reward = np.tanh(sharpe_ratio)  # tanh limita entre -1 y 1 de forma suave
             else:
-                reward = -0.01  # Pequeña penalización
+                # Si no hay volatilidad (improbable pero posible), basamos la recompensa en el retorno
+                reward = np.sign(mean_return - risk_free_rate_daily) * 0.1
+        else:
+            # Durante las primeras iteraciones, usamos el retorno diario como aproximación
+            # Aplicamos un factor de escalado para que sea comparable con las recompensas futuras basadas en Sharpe
+            reward = daily_return * 10.0  # Escalamos para que sea comparable en magnitud
+        
+        # Añadimos un pequeño componente por el retorno inmediato para mejorar la señal inicial
+        immediate_reward_weight = 0.1
+        if len(self.returns_history) >= 20:
+            reward = (1 - immediate_reward_weight) * reward + immediate_reward_weight * daily_return * 10.0
+        
+        # ----- FIN DE LA NUEVA FUNCIÓN DE RECOMPENSA -----
         
         # Prevenir recompensas extremas
         reward = np.clip(reward, -1.0, 1.0)
@@ -227,7 +269,8 @@ class PortfolioEnv(gym.Env):
             "cash": self.cash,
             "shares": self.shares,
             "portfolio_value": new_portfolio_value,
-            "min_weight_applied": any(below_min) if np.sum(action) > 0 else False
+            "min_weight_applied": any(below_min) if np.sum(action) > 0 else False,
+            "sharpe_ratio": sharpe_ratio if len(self.returns_history) >= 20 and std_return > 0 else None  # Añadimos el Sharpe al info
         }
         return obs, reward, self.done, False, info
     
