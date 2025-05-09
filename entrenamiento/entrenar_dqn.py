@@ -97,7 +97,7 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # Parámetros de entrenamiento
-NUM_EPISODES = 1500          # ↑ Aumentado significativamente (de 500 a 1500)
+NUM_EPISODES = 1000          # ↑ Aumentado significativamente (de 500 a 1000)
 MAX_STEPS = 252              # ✓ Mantener igual
 UPDATE_TARGET_EVERY = 5      # ↓ Disminuido para actualizaciones más frecuentes (de 10 a 5)
 SAVE_MODEL_EVERY = 100       # ↑ Aumentado para reducir I/O (de 50 a 100)
