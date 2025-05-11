@@ -11,7 +11,7 @@ for etf in etfs:
     print(f"Descargando datos para {etf}...")
     
     # Descarga de datos desde el 2007 sin multi-nivel
-    data = yf.download(etf, start="2007-01-01", end="2025-12-31", interval="1d", auto_adjust=False)
+    data = yf.download(etf, start="2007-04-11", end="2025-12-31", interval="1d", auto_adjust=False)
 
     # Nos aseguramos de que el índice sea una columna normal
     data.reset_index(inplace=True)

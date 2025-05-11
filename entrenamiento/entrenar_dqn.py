@@ -97,7 +97,7 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # Parámetros de entrenamiento
-NUM_EPISODES = 1000          # ↑ Aumentado significativamente (de 500 a 1000)
+NUM_EPISODES = 2000          # ↑ Aumentado significativamente (de 500 a 1000)
 MAX_STEPS = 252              # ✓ Mantener igual
 UPDATE_TARGET_EVERY = 5      # ↓ Disminuido para actualizaciones más frecuentes (de 10 a 5)
 SAVE_MODEL_EVERY = 100       # ↑ Aumentado para reducir I/O (de 50 a 100)
@@ -148,20 +148,21 @@ def evaluate_agent(agent, env, num_episodes=5, render=False):
         done = False
         episode_reward = 0
         daily_returns = []
+        previous_value = env.balance  # Inicializar previous_value al balance inicial
         
         while not done:
             action = agent.select_action(state, training=False)
             next_state, reward, done, _, info = env.step(action)
             
-            # Capturar retorno diario (si está disponible en info)
-            if 'daily_return' in info:
-                daily_returns.append(info['daily_return'])
-            # Alternativamente, podemos calcularlo nosotros:
-            elif 'portfolio_value' in info and len(daily_returns) > 0:
-                daily_return = info['portfolio_value'] / previous_value - 1
-                daily_returns.append(daily_return)
+            if render and ep == 0:  # Solo renderizamos el primer episodio
+                env.render()
             
-            previous_value = info.get('portfolio_value', env.balance)
+            # Capturar retorno diario
+            current_value = info.get('portfolio_value', env.balance)
+            daily_return = current_value / previous_value - 1
+            daily_returns.append(daily_return)
+            previous_value = current_value
+            
             episode_reward += reward
             state = next_state
         
@@ -170,9 +171,12 @@ def evaluate_agent(agent, env, num_episodes=5, render=False):
         all_daily_returns.extend(daily_returns)
     
     # Calcular Sharpe ratio
-    avg_return = np.mean(all_daily_returns) * 252  # Anualizado
-    std_return = np.std(all_daily_returns) * np.sqrt(252)  # Anualizado
-    sharpe_ratio = avg_return / std_return if std_return > 0 else 0
+    if len(all_daily_returns) > 0:
+        avg_return = np.mean(all_daily_returns) * 252  # Anualizado
+        std_return = np.std(all_daily_returns) * np.sqrt(252)  # Anualizado
+        sharpe_ratio = avg_return / std_return if std_return > 0 else 0
+    else:
+        sharpe_ratio = 0
     
     return {
         'avg_reward': np.mean(total_rewards),
@@ -440,35 +444,35 @@ def main():
         minutes, seconds = divmod(remainder, 60)
         
         # Evaluamos el agente cada 10 episodios o en el último
-    if episode % 10 == 0 or episode == NUM_EPISODES - 1:
-        print(f"\nEvaluando agente en episodio {episode+1}...")
-        eval_results = evaluate_agent(agent, env, EVAL_EPISODES)
-        
-        # Inicializar best_eval_sharpe si no existe
-        if not hasattr(locals(), 'best_eval_sharpe') or 'best_eval_sharpe' not in locals():
-            best_eval_sharpe = 0.0
-        
-        print(f"Episodio {episode+1}/{NUM_EPISODES} | "
-            f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
-            f"Recompensa: {episode_reward:.4f} | "
-            f"Balance: ${env.balance:.2f} | "
-            f"Epsilon: {agent.epsilon:.4f} | "
-            f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f} | "
-            f"Eval Balance: ${eval_results['avg_balance']:.2f} | "
-            f"Eval Sharpe: {eval_results['avg_sharpe']:.4f}")  # Añadir Sharpe al log
-        
-        # Guardamos el mejor modelo según el ratio Sharpe en lugar del balance
-        if eval_results['avg_sharpe'] > best_eval_sharpe:
-            best_eval_sharpe = eval_results['avg_sharpe']
-            agent.save(os.path.join(model_dir, 'best_model.pth'))
-            print(f"Nuevo mejor modelo guardado con Sharpe: {best_eval_sharpe:.4f} (Balance: ${eval_results['avg_balance']:.2f})")
-    else:
-        print(f"Episodio {episode+1}/{NUM_EPISODES} | "
-            f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
-            f"Recompensa: {episode_reward:.4f} | "
-            f"Balance: ${env.balance:.2f} | "
-            f"Epsilon: {agent.epsilon:.4f} | "
-            f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f}")
+        if episode % 10 == 0 or episode == NUM_EPISODES - 1:
+            print(f"\nEvaluando agente en episodio {episode+1}...")
+            eval_results = evaluate_agent(agent, env, EVAL_EPISODES)
+            
+            # Inicializar best_eval_sharpe si no existe
+            if not hasattr(locals(), 'best_eval_sharpe') or 'best_eval_sharpe' not in locals():
+                best_eval_sharpe = 0.0
+            
+            print(f"Episodio {episode+1}/{NUM_EPISODES} | "
+                f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
+                f"Recompensa: {episode_reward:.4f} | "
+                f"Balance: ${env.balance:.2f} | "
+                f"Epsilon: {agent.epsilon:.4f} | "
+                f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f} | "
+                f"Eval Balance: ${eval_results['avg_balance']:.2f} | "
+                f"Eval Sharpe: {eval_results['avg_sharpe']:.4f}")  # Añadir Sharpe al log
+            
+            # Guardamos el mejor modelo según el ratio Sharpe en lugar del balance
+            if eval_results['avg_sharpe'] > best_eval_sharpe:
+                best_eval_sharpe = eval_results['avg_sharpe']
+                agent.save(os.path.join(model_dir, 'best_model.pth'))
+                print(f"Nuevo mejor modelo guardado con Sharpe: {best_eval_sharpe:.4f} (Balance: ${eval_results['avg_balance']:.2f})")
+        else:
+            print(f"Episodio {episode+1}/{NUM_EPISODES} | "
+                f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
+                f"Recompensa: {episode_reward:.4f} | "
+                f"Balance: ${env.balance:.2f} | "
+                f"Epsilon: {agent.epsilon:.4f} | "
+                f"Pérdida: {np.mean(episode_loss) if episode_loss else 'N/A':.6f}")
         
     # Guardamos el modelo periódicamente
     if (episode + 1) % SAVE_MODEL_EVERY == 0:

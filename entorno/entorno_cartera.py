@@ -190,7 +190,7 @@ class PortfolioEnv(gym.Env):
         if sum_weights > 0:
             self.portfolio_weights = self.portfolio_weights / sum_weights
         
-        # ----- INICIO DE LA NUEVA FUNCIÓN DE RECOMPENSA BASADA EN SHARPE -----
+        # ----- INICIO DE LA FUNCIÓN DE RECOMPENSA BASADA EN SHARPE -----
         
         # Inicializa el historial de retornos si no existe
         if not hasattr(self, 'returns_history'):
@@ -237,7 +237,7 @@ class PortfolioEnv(gym.Env):
         if len(self.returns_history) >= 20:
             reward = (1 - immediate_reward_weight) * reward + immediate_reward_weight * daily_return * 10.0
         
-        # ----- FIN DE LA NUEVA FUNCIÓN DE RECOMPENSA -----
+        # ----- FIN DE LA FUNCIÓN DE RECOMPENSA -----
         
         # Prevenir recompensas extremas
         reward = np.clip(reward, -1.0, 1.0)
@@ -270,7 +270,8 @@ class PortfolioEnv(gym.Env):
             "shares": self.shares,
             "portfolio_value": new_portfolio_value,
             "min_weight_applied": any(below_min) if np.sum(action) > 0 else False,
-            "sharpe_ratio": sharpe_ratio if len(self.returns_history) >= 20 and std_return > 0 else None  # Añadimos el Sharpe al info
+            "daily_return": portfolio_growth - 1,
+            "sharpe_ratio": sharpe_ratio if len(self.returns_history) >= 20 and std_return > 0 else None  
         }
         return obs, reward, self.done, False, info
     
