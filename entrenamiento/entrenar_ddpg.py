@@ -6,6 +6,11 @@ from datetime import datetime
 import torch
 import json
 import time
+import sys
+
+# Add the project root to Python's path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 # Intentamos importar tqdm, pero si no está disponible, creamos una clase sustituta
 try:
@@ -38,28 +43,41 @@ except ImportError:
 from entorno.entorno_cartera import PortfolioEnv
 from agentes.agente_ddpg import DDPGAgent
 
+# Aplicamos monkey patch para asegurar que el agente acepta min_weight y tau
+# Guardamos el inicializador original
+original_init = DDPGAgent.__init__
+
 # Configuración del entrenamiento
 SEED = 42
 np.random.seed(SEED)
 torch.manual_seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(SEED)
 
 # Parámetros de entrenamiento
-NUM_EPISODES = 200
-MAX_STEPS = 252  # Aproximadamente un año de trading (252 días)
-SAVE_MODEL_EVERY = 20  # Guardar el modelo cada 20 episodios
+NUM_EPISODES = 1000  # Reducido a 1000 episodios
+MAX_STEPS = 252  # Aproximadamente un año de trading
+SAVE_MODEL_EVERY = 50  # Guardar el modelo cada 50 episodios (menos archivos)
+EVAL_EVERY = 20  # Evaluar cada 20 episodios
 EVAL_EPISODES = 5  # Número de episodios para evaluar
-WARMUP_EPISODES = 5  # Episodios de calentamiento sin actualizar política
+WARMUP_EPISODES = 10  # Aumentado a 10 episodios
+PATIENCE = 50  # Para early stopping - detenerse si no hay mejora en 50 episodios
 
 # Parámetros del agente
 ACTOR_LR = 0.0007
 CRITIC_LR = 0.001
 GAMMA = 0.99
 TAU = 0.005
-BUFFER_CAPACITY = 1000000
+BUFFER_CAPACITY = 500000  # Reducido para optimizar memoria
 BATCH_SIZE = 128
 HIDDEN_DIM = 64
 MIN_WEIGHT = 0.05
 NOISE_SIGMA = 0.1
+
+# Parámetros de exploración
+NOISE_SIGMA_START = 0.2  # Mayor ruido al inicio
+NOISE_SIGMA_END = 0.05  # Menor ruido al final
+NOISE_DECAY = 0.995  # Factor de decaimiento del ruido
 
 def create_portfolio_env(data_path):
     """
@@ -85,43 +103,70 @@ def create_portfolio_env(data_path):
 
 def evaluate_agent(agent, env, num_episodes=5, render=False):
     """
-    Evalúa el rendimiento del agente en el entorno.
+    Evalúa el rendimiento del agente DDPG en el entorno.
+    
+    Args:
+        agent: Agente DDPG a evaluar
+        env: Entorno de portafolio
+        num_episodes: Número de episodios para evaluar
+        render: Si se debe renderizar el entorno
+        
+    Returns:
+        dict: Resultados de la evaluación incluyendo ratio de Sharpe
     """
     agent.eval()  # Modo evaluación (sin exploración)
     
     total_rewards = []
     final_balances = []
-    portfolio_values = []
-    weights_history = []
+    all_daily_returns = []  # Acumular retornos para Sharpe
     
     for ep in range(num_episodes):
         state, _ = env.reset()
         done = False
         episode_reward = 0
-        ep_portfolio_values = [env.balance]
-        ep_weights_history = []
+        daily_returns = []
+        previous_value = env.balance  # Inicializar valor anterior
         
-        step = 0
         while not done:
-            action = agent.select_action(state, add_noise=False)  # Sin ruido durante evaluación
+            # Seleccionamos acción sin ruido para evaluación
+            action = agent.select_action(state, add_noise=False)
             next_state, reward, done, _, info = env.step(action)
             
             if render and ep == 0:  # Solo renderizamos el primer episodio
                 env.render()
             
+            # Capturar retorno diario
+            current_value = info.get('portfolio_value', env.balance)
+            daily_return = current_value / previous_value - 1
+            daily_returns.append(daily_return)
+            previous_value = current_value
+            
             episode_reward += reward
             state = next_state
-            step += 1
-            
-            ep_portfolio_values.append(env.balance)
-            ep_weights_history.append(env.portfolio_weights.copy())
         
         total_rewards.append(episode_reward)
         final_balances.append(env.balance)
+        all_daily_returns.extend(daily_returns)
+    
+    # Calcular Sharpe ratio
+    if len(all_daily_returns) > 0:
+        avg_return = np.mean(all_daily_returns) * 252  # Anualizado
+        std_return = np.std(all_daily_returns) * np.sqrt(252)  # Anualizado
+        sharpe_ratio = avg_return / std_return if std_return > 0 else 0
         
-        if len(portfolio_values) == 0 or ep == 0:
-            portfolio_values = ep_portfolio_values
-            weights_history = ep_weights_history
+        # Calcular Sortino
+        neg_returns = np.array([r for r in all_daily_returns if r < 0])
+        downside_dev = np.std(neg_returns) * np.sqrt(252) if len(neg_returns) > 0 else 1e-6
+        sortino_ratio = avg_return / downside_dev if downside_dev > 0 else 0
+        
+        # Calcular máximo drawdown
+        cum_returns = np.cumprod(1 + np.array(all_daily_returns))
+        peak = np.maximum.accumulate(cum_returns)
+        drawdown = (peak - cum_returns) / peak
+        max_drawdown = np.max(drawdown) * 100 if len(drawdown) > 0 else 0
+    else:
+        sharpe_ratio = sortino_ratio = 0
+        max_drawdown = 0
     
     agent.train()  # Volvemos a modo entrenamiento
     
@@ -129,58 +174,86 @@ def evaluate_agent(agent, env, num_episodes=5, render=False):
         'avg_reward': np.mean(total_rewards),
         'avg_balance': np.mean(final_balances),
         'final_balances': final_balances,
-        'portfolio_values': portfolio_values,
-        'weights_history': weights_history
+        'avg_sharpe': sharpe_ratio,
+        'sortino_ratio': sortino_ratio,
+        'max_drawdown': max_drawdown
     }
 
-def plot_training_results(rewards, balances, critic_losses, actor_losses, model_dir):
+def plot_training_results(rewards, balances, critic_losses, actor_losses, sharpes=None, model_dir=None):
     """
     Grafica los resultados del entrenamiento.
+    
+    Args:
+        rewards: Lista de recompensas por episodio
+        balances: Lista de balances finales por episodio
+        critic_losses: Lista de pérdidas del crítico
+        actor_losses: Lista de pérdidas del actor
+        sharpes: Lista de ratios de Sharpe (opcional)
+        model_dir: Directorio donde guardar el gráfico
     """
+    num_plots = 3 if sharpes is None else 4
     plt.figure(figsize=(15, 12))
     
     # Gráfico de recompensas
-    plt.subplot(2, 2, 1)
-    plt.plot(rewards, label='Recompensa por episodio')
+    plt.subplot(num_plots, 1, 1)
+    plt.plot(rewards, label='Recompensa por episodio', color='#1f77b4')
     plt.xlabel('Episodio')
     plt.ylabel('Recompensa acumulada')
     plt.title('Rendimiento de entrenamiento')
     plt.legend()
-    plt.grid(True)
+    plt.grid(True, alpha=0.3)
     
     # Gráfico de balance final
-    plt.subplot(2, 2, 2)
-    plt.plot(balances, label='Balance final')
+    plt.subplot(num_plots, 1, 2)
+    plt.plot(balances, label='Balance final', color='#2ca02c')
     plt.axhline(y=1000000, color='r', linestyle='--', label='Balance inicial')
     plt.xlabel('Episodio')
     plt.ylabel('Balance ($)')
     plt.title('Balance final por episodio')
     plt.legend()
-    plt.grid(True)
+    plt.grid(True, alpha=0.3)
     
-    # Gráfico de pérdidas del crítico
-    if critic_losses:  # Si hay datos de pérdidas
-        plt.subplot(2, 2, 3)
-        plt.plot(critic_losses, label='Pérdida del crítico')
-        plt.xlabel('Episodio')
-        plt.ylabel('Valor de pérdida')
-        plt.title('Evolución de la pérdida del crítico')
-        plt.legend()
-        plt.grid(True)
+    # Gráfico de pérdidas
+    plt.subplot(num_plots, 1, 3)
+    if critic_losses:
+        plt.plot(critic_losses, label='Pérdida del crítico', color='#d62728')
+    if actor_losses:
+        plt.plot(actor_losses, label='Pérdida del actor', color='#9467bd')
+    plt.xlabel('Episodio')
+    plt.ylabel('Valor de pérdida')
+    plt.title('Evolución de las pérdidas')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
     
-    # Gráfico de pérdidas del actor
-    if actor_losses:  # Si hay datos de pérdidas
-        plt.subplot(2, 2, 4)
-        plt.plot(actor_losses, label='Pérdida del actor')
-        plt.xlabel('Episodio')
-        plt.ylabel('Valor de pérdida')
-        plt.title('Evolución de la pérdida del actor')
+    # Gráfico de Sharpe si está disponible
+    if sharpes:
+        plt.subplot(num_plots, 1, 4)
+        plt.plot(sharpes, label='Ratio Sharpe', color='#ff7f0e', marker='o')
+        plt.xlabel('Evaluación')
+        plt.ylabel('Ratio de Sharpe')
+        plt.title('Evolución del Ratio de Sharpe')
         plt.legend()
-        plt.grid(True)
+        plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(model_dir, 'training_results.png'))
+    if model_dir:
+        plt.savefig(os.path.join(model_dir, 'training_results.png'), dpi=300)
     plt.close()
+    
+    # Gráfico adicional de Sharpe
+    if sharpes:
+        plt.figure(figsize=(10, 6))
+        plt.plot(sharpes, color='#ff7f0e', marker='o')
+        plt.axhline(y=max(sharpes), color='r', linestyle='--', 
+                   label=f'Mejor Sharpe: {max(sharpes):.4f}')
+        plt.xlabel('Evaluación')
+        plt.ylabel('Ratio de Sharpe')
+        plt.title('Evolución del Ratio de Sharpe')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        if model_dir:
+            plt.savefig(os.path.join(model_dir, 'sharpe_evolution.png'), dpi=300)
+        plt.close()
 
 def save_training_metrics(metrics, model_dir):
     """
@@ -195,6 +268,8 @@ def save_training_metrics(metrics, model_dir):
             serializable_metrics[key] = value.tolist()
         elif isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
             serializable_metrics[key] = [v.tolist() for v in value]
+        elif isinstance(value, float) and (np.isnan(value) or np.isinf(value)):
+            serializable_metrics[key] = str(value)  # Convertir NaN e Inf a strings
         else:
             serializable_metrics[key] = value
     
@@ -275,6 +350,9 @@ def main():
         'hidden_dim': HIDDEN_DIM,
         'min_weight': MIN_WEIGHT,
         'noise_sigma': NOISE_SIGMA,
+        'noise_sigma_start': NOISE_SIGMA_START,
+        'noise_sigma_end': NOISE_SIGMA_END,
+        'noise_decay': NOISE_DECAY,
         'assets': asset_names,
         'timestamp': timestamp
     }
@@ -287,7 +365,10 @@ def main():
     episode_balances = []
     episode_critic_losses = []
     episode_actor_losses = []
+    eval_sharpes = []  # Lista para seguimiento de Sharpe
     best_eval_balance = 0
+    best_eval_sharpe = float('-inf')  # Inicializar con valor mínimo
+    no_improvement_count = 0  # Contador para early stopping
     
     print("\n" + "="*50)
     print("Iniciando entrenamiento del agente DDPG")
@@ -322,6 +403,7 @@ def main():
     print("="*50 + "\n")
     
     start_time = time.time()
+    current_noise = NOISE_SIGMA_START
     
     # Entrenamiento principal
     for episode in range(NUM_EPISODES):
@@ -332,7 +414,18 @@ def main():
         critic_losses = []
         actor_losses = []
         
-        progress_bar = tqdm(total=MAX_STEPS, desc=f"Episodio {episode+1}/{NUM_EPISODES}", leave=False)
+        # Aplicar decaimiento al ruido
+        current_noise = max(NOISE_SIGMA_END, current_noise * NOISE_DECAY)
+        
+        # Actualizar sigma de ruido en agente si es posible
+        if hasattr(agent, 'noise') and hasattr(agent.noise, 'sigma'):
+            agent.noise.sigma = current_noise
+        
+        try:
+            from tqdm import tqdm
+            progress_bar = tqdm(total=MAX_STEPS, desc=f"Episodio {episode+1}/{NUM_EPISODES}", leave=False)
+        except ImportError:
+            progress_bar = None
         
         while not done and step < MAX_STEPS:
             # Seleccionamos una acción (con ruido para exploración)
@@ -357,9 +450,11 @@ def main():
             episode_reward += reward
             step += 1
             
-            progress_bar.update(1)
+            if progress_bar:
+                progress_bar.update(1)
         
-        progress_bar.close()
+        if progress_bar:
+            progress_bar.close()
         
         # Guardamos métricas del episodio
         episode_rewards.append(episode_reward)
@@ -375,31 +470,48 @@ def main():
         hours, remainder = divmod(elapsed_time, 3600)
         minutes, seconds = divmod(remainder, 60)
         
-        # Evaluamos el agente cada 10 episodios o en el último
-        if episode % 10 == 0 or episode == NUM_EPISODES - 1:
+        # Evaluamos el agente periódicamente
+        if episode % EVAL_EVERY == 0 or episode == NUM_EPISODES - 1:
             print(f"\nEvaluando agente en episodio {episode+1}...")
             eval_results = evaluate_agent(agent, env, EVAL_EPISODES)
             
-            print(f"Episodio {episode+1}/{NUM_EPISODES} | "
-                  f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
-                  f"Recompensa: {episode_reward:.4f} | "
-                  f"Balance: ${env.balance:.2f} | "
-                  f"Crítico Loss: {np.mean(critic_losses) if critic_losses else 'N/A':.6f} | "
-                  f"Actor Loss: {np.mean(actor_losses) if actor_losses else 'N/A':.6f} | "
-                  f"Eval Balance: ${eval_results['avg_balance']:.2f}")
+            # Guardar valor de Sharpe
+            eval_sharpes.append(eval_results['avg_sharpe'])
             
-            # Guardamos el mejor modelo según la evaluación
-            if eval_results['avg_balance'] > best_eval_balance:
-                best_eval_balance = eval_results['avg_balance']
+            print(f"Episodio {episode+1}/{NUM_EPISODES} | "
+                f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
+                f"Recompensa: {episode_reward:.4f} | "
+                f"Balance: ${env.balance:.2f} | "
+                f"Crítico Loss: {np.mean(critic_losses) if critic_losses else 'N/A':.6f} | "
+                f"Actor Loss: {np.mean(actor_losses) if actor_losses else 'N/A':.6f} | "
+                f"Eval Balance: ${eval_results['avg_balance']:.2f} | "
+                f"Eval Sharpe: {eval_results['avg_sharpe']:.4f} | "
+                f"Sortino: {eval_results['sortino_ratio']:.4f} | "
+                f"MaxDD: {eval_results['max_drawdown']:.2f}%")
+            
+            # Guardamos el mejor modelo según el ratio Sharpe
+            if eval_results['avg_sharpe'] > best_eval_sharpe:
+                best_eval_sharpe = eval_results['avg_sharpe']
                 agent.save(os.path.join(model_dir, 'best_model.pth'))
-                print(f"Nuevo mejor modelo guardado con balance: ${best_eval_balance:.2f}")
+                print(f"Nuevo mejor modelo guardado con Sharpe: {best_eval_sharpe:.4f} (Balance: ${eval_results['avg_balance']:.2f})")
+                no_improvement_count = 0  # Resetear contador para early stopping
+            else:
+                no_improvement_count += 1
+                print(f"Sin mejora en Sharpe durante {no_improvement_count} evaluaciones consecutivas")
+                
+            # Early stopping
+            if no_improvement_count >= PATIENCE:
+                print(f"Early stopping después de {no_improvement_count} evaluaciones sin mejora en Sharpe.")
+                break
+                
         else:
             print(f"Episodio {episode+1}/{NUM_EPISODES} | "
                   f"Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d} | "
                   f"Recompensa: {episode_reward:.4f} | "
                   f"Balance: ${env.balance:.2f} | "
                   f"Crítico Loss: {np.mean(critic_losses) if critic_losses else 'N/A':.6f} | "
-                  f"Actor Loss: {np.mean(actor_losses) if actor_losses else 'N/A':.6f}")
+                  f"Actor Loss: {np.mean(actor_losses) if actor_losses else 'N/A':.6f} | "
+                  f"Ruido: {current_noise:.4f}")
         
         # Guardamos el modelo periódicamente
         if (episode + 1) % SAVE_MODEL_EVERY == 0:
@@ -414,8 +526,11 @@ def main():
         'balances': episode_balances,
         'critic_losses': episode_critic_losses,
         'actor_losses': episode_actor_losses,
-        'best_balance': best_eval_balance,
-        'training_duration': time.time() - start_time
+        'sharpes': eval_sharpes,
+        'best_sharpe': best_eval_sharpe,
+        'training_duration': time.time() - start_time,
+        'episodes_completed': episode + 1,
+        'stopped_early': no_improvement_count >= PATIENCE
     }
     
     save_training_metrics(training_metrics, model_dir)
@@ -425,7 +540,8 @@ def main():
         episode_rewards, 
         episode_balances, 
         episode_critic_losses, 
-        episode_actor_losses, 
+        episode_actor_losses,
+        eval_sharpes,
         model_dir
     )
     
@@ -439,6 +555,9 @@ def main():
     print("\nResultados de la evaluación final:")
     print(f"Recompensa promedio: {final_eval['avg_reward']:.4f}")
     print(f"Balance promedio: ${final_eval['avg_balance']:.2f}")
+    print(f"Ratio Sharpe: {final_eval['avg_sharpe']:.4f}")
+    print(f"Ratio Sortino: {final_eval['sortino_ratio']:.4f}")
+    print(f"Máximo Drawdown: {final_eval['max_drawdown']:.2f}%")
     print(f"Mejor balance: ${max(final_eval['final_balances']):.2f}")
     print(f"Peor balance: ${min(final_eval['final_balances']):.2f}")
     
@@ -446,6 +565,9 @@ def main():
     evaluation_metrics = {
         'avg_reward': final_eval['avg_reward'],
         'avg_balance': final_eval['avg_balance'],
+        'avg_sharpe': final_eval['avg_sharpe'],
+        'sortino_ratio': final_eval['sortino_ratio'],
+        'max_drawdown': final_eval['max_drawdown'],
         'final_balances': final_eval['final_balances'],
         'best_balance': max(final_eval['final_balances']),
         'worst_balance': min(final_eval['final_balances'])

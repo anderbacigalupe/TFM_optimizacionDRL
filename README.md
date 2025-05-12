@@ -79,20 +79,20 @@ VB: Small caps de EEUU
 
 - Python 3.10+
 - Dependencias (instalables mediante pip install -r requirements.txt):
-    numpy>=1.20.0
-    pandas>=1.3.0
-    matplotlib>=3.4.0
+    numpy>=1.24.0
+    pandas>=2.0.0
+    matplotlib>=3.7.0
     gymnasium>=0.28.1
-    torch>=1.10.0
-    yfinance>=0.1.74
-    scikit-learn>=1.0.0
-    tqdm>=4.62.0
-    tensorboard>=2.10.0
-    seaborn>=0.11.0
-    ipython>=7.0.0
+    torch>=2.0.0
+    yfinance>=0.2.12
+    scipy>=1.10.0
+    scikit-learn>=1.2.0
+    tqdm>=4.65.0
+    seaborn>=0.12.0
+    ipython>=8.0.0
+    statsmodels>=0.14.0
     json5>=0.9.6
-    scipy>=1.7.0
-    statsmodels>=0.13.0
+    tensorboard>=2.10.0
 
 ---
 
