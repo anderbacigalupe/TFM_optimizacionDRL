@@ -45,6 +45,9 @@ class PortfolioEnv(gym.Env):
         
         # Establece un peso mínimo para cada activo (por ejemplo, 0.05 o 5%)
         min_weight = 0.05  # Peso mínimo del 5%
+
+        # Inicializa below_min como False por defecto
+        below_min = False
         
         # Aplica el peso mínimo y normaliza
         if np.sum(action) > 0:  # Evita la división por cero
@@ -269,7 +272,7 @@ class PortfolioEnv(gym.Env):
             "cash": self.cash,
             "shares": self.shares,
             "portfolio_value": new_portfolio_value,
-            "min_weight_applied": any(below_min) if np.sum(action) > 0 else False,
+            "min_weight_applied": np.any(below_min), ##if np.sum(action) > 0 else False,
             "daily_return": portfolio_growth - 1,
             "sharpe_ratio": sharpe_ratio if len(self.returns_history) >= 20 and std_return > 0 else None  
         }

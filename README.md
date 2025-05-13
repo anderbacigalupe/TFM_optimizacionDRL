@@ -9,6 +9,7 @@ Este proyecto forma parte del Trabajo de Fin de Máster en Ciencia de Datos. El 
 TFM_optimizacionDRL/
 │
 ├── agentes/                # Implementaciones de agentes DRL
+│   ├── __init__.py
 │   ├── agente_dqn.py       # Implementación del agente DQN
 │   └── agente_ddpg.py      # Implementación del agente DDPG (Actor-Crítico)
 │
@@ -17,17 +18,21 @@ TFM_optimizacionDRL/
 │   └── processed/          # Datos procesados y combinados para entrenamiento
 │
 ├── entorno/                # Implementación del entorno de inversión personalizado
+│    ├── __init__.py
 │   └── entorno_cartera.py  # Entorno compatible con Gymnasium
 │
 ├── entrenamiento/          # Scripts de entrenamiento de los modelos
+│   ├── __init__.py         # Inicialización del paquete entrenamiento
 │   ├── entrenar_dqn.py     # Entrenamiento del modelo DQN
 │   └── entrenar_ddpg.py    # Entrenamiento del modelo DDPG
 │
 ├── evaluacion/             # Evaluación y métricas de los modelos
+│   ├── __init__.py         # Inicialización del paquete evaluacion
 │   ├── evaluar_dqn.py      # Evaluación del modelo DQN
 │   └── evaluar_ddpg.py     # Evaluación del modelo DDPG
 │
 ├── markowitz/              # Implementación del modelo Media-Varianza
+│   ├── __init__.py         # Inicialización del paquete markowitz
 │   ├── markowitz_backtest.py         # Backtesting del modelo de Markowitz
 │   ├── simulacion_equiponderada.py   # Simulación de cartera equiponderada
 │   └── simulacion_markowitz.py       # Simulación del modelo de Markowitz
@@ -37,10 +42,12 @@ TFM_optimizacionDRL/
 ├── results/             # Resultados y visualizaciones
 │
 ├── utils/                  # Scripts con utilidades varias para el proyecto
+│   ├── __init__.py         # Inicialización del paquete utils
 │   ├── check_cuda.py               # Verificar CUDA y cuDNN y comprobar GPU instalada
 │   ├── procesar_datos.py           # Preprocesamiento de datos
 │   └── calculate_log_returns.py    # Cálculo de retornos logarítmicos
 │
+├── __init__.py             # Archivo de inicialización principal
 ├── .gitignore              # Archivos y carpetas ignoradas por Git
 ├── environment.yml         # Archivo para reproducir el entorno con conda
 ├── README.md               # Este archivo
@@ -54,6 +61,7 @@ TFM_optimizacionDRL/
 - ✅ Deep Q-Network (DQN): Algoritmo de aprendizaje por refuerzo que discretiza el espacio de acciones para la asignación de pesos en la cartera.
 - ✅ Deep Deterministic Policy Gradient (DDPG): Arquitectura actor-crítico que opera directamente en un espacio de acciones continuo, permitiendo una asignación de pesos más precisa.
 - ✅ Markowitz (Media-Varianza): Implementación del modelo clásico de optimización con estrategia walk-forward anclada, usado como benchmark.
+- ✅ Cartera equiponderada: Cartera con mismos peso por activo con rebalanceo mensual, usado como benchmark.
 
 ---
 
