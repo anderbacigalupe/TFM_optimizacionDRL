@@ -14,12 +14,13 @@ TFM_optimizacionDRL/
 │   └── agente_ddpg.py      # Implementación del agente DDPG (Actor-Crítico)
 │
 ├── data/                   # Datos históricos de precios y variables económicas
-│   ├── raw/                # Archivos CSV originales descargados de Yahoo Finance
-│   └── processed/          # Datos procesados y combinados para entrenamiento
+│   ├── processed/          # Datos procesados y combinados para entrenamiento 
+│   └── raw/                # Archivos CSV originales descargados de Yahoo Finance
+│        └── descargar_datos.py     # Script para descargar los datos de los ETFs               
 │
 ├── entorno/                # Implementación del entorno de inversión personalizado
 │    ├── __init__.py
-│   └── entorno_cartera.py  # Entorno compatible con Gymnasium
+│    └── entorno_cartera.py  # Entorno compatible con Gymnasium
 │
 ├── entrenamiento/          # Scripts de entrenamiento de los modelos
 │   ├── __init__.py         # Inicialización del paquete entrenamiento
@@ -44,8 +45,7 @@ TFM_optimizacionDRL/
 ├── utils/                  # Scripts con utilidades varias para el proyecto
 │   ├── __init__.py         # Inicialización del paquete utils
 │   ├── check_cuda.py               # Verificar CUDA y cuDNN y comprobar GPU instalada
-│   ├── procesar_datos.py           # Preprocesamiento de datos
-│   └── calculate_log_returns.py    # Cálculo de retornos logarítmicos
+│   └── procesar_datos.py           # Preprocesamiento de datos 
 │
 ├── __init__.py             # Archivo de inicialización principal
 ├── .gitignore              # Archivos y carpetas ignoradas por Git
